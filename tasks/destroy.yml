@@ -1,0 +1,80 @@
+---
+- name: Set up aws connection info
+  set_fact:
+    aws_connection_info: &aws_connection_info
+      profile: "summit-18"
+      region: "{{ aws_region }}"
+  no_log: yes
+- name: Get VPC ID
+  ec2_vpc_net_facts:
+    filters:
+      cidr: 10.0.0.0/20
+    <<: *aws_connection_info
+  register: networks
+- name: Terminate web server instance
+  ec2_instance:
+    <<: *aws_connection_info
+    state: absent
+    filters:
+      tag:Name: summit-web-test
+      instance-state-name: running
+
+- name: Terminate Tower instance
+  ec2_instance:
+    <<: *aws_connection_info
+    state: absent
+    filters:
+      tag:Name: summit-tower-instance
+      instance-state-name: running
+
+- ec2_vpc_igw:
+    vpc_id: "{{ networks.vpcs[0].vpc_id }}"
+    state: absent
+    <<: *aws_connection_info
+  when: networks.vpcs
+
+- name: Destroy security group
+  ec2_group:
+    name: '{{ item }}'
+    state: absent
+    vpc_id: "{{ networks.vpcs[0].vpc_id }}"
+    <<: *aws_connection_info
+  with_items:
+    - '{{ demo_prefix }}-ssh'
+    - '{{ demo_prefix }}-web'
+    - '{{ demo_prefix }}-tower'
+  when: networks.vpcs
+- name: Destroy subnets
+  ec2_vpc_subnet:
+    state: absent
+    cidr: "{{ item }}"
+    vpc_id: "{{ networks.vpcs[0].vpc_id }}"
+    <<: *aws_connection_info
+  with_items:
+    - 10.0.0.0/24
+    - 10.0.1.0/24
+    - 10.0.2.0/24
+  when: networks.vpcs
+
+- ec2_vpc_route_table_facts:
+    <<: *aws_connection_info
+    filters:
+      vpc-id: "{{ networks.vpcs[0].vpc_id }}"
+  register: tables
+  when: networks.vpcs
+- name: Destroy route tables
+  ec2_vpc_route_table:
+    route_table_id: "{{ item.id }}"
+    lookup: id
+    state: absent
+    <<: *aws_connection_info
+  with_items: "{{ tables.route_tables }}"
+  ignore_errors: yes
+  when: networks.vpcs
+
+- name: destroy a VPC
+  ec2_vpc_net:
+    name: "{{ demo_prefix }}-vpc"
+    state: absent
+    cidr_block: "10.0.0.0/20"
+    <<: *aws_connection_info

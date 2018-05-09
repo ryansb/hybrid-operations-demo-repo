@@ -1,0 +1,93 @@
+---
+- name: Set up aws connection info
+  set_fact:
+    aws_connection_info: &aws_connection_info
+      profile: "summit-18"
+      region: "{{ aws_region }}"
+  no_log: yes
+- name: create a VPC
+  ec2_vpc_net:
+    name: "{{ demo_prefix }}-vpc"
+    state: present
+    cidr_block: "10.0.0.0/20"
+    <<: *aws_connection_info
+    tags:
+      Description: "Testing VPC"
+  register: vpc_result
+- name: Create subnets
+  ec2_vpc_subnet:
+    cidr: "{{ item.range }}"
+    az: "{{ aws_region }}{{ item.az }}"
+    vpc_id: "{{ vpc_result.vpc.id }}"
+    tags:
+      Name: '{{ demo_prefix }}-zone-{{ item.az }}'
+      Description: 'Subnet in zone {{ item.az }}'
+    <<: *aws_connection_info
+    state: present
+  with_items:
+    - az: a
+      range: 10.0.0.0/24
+    - az: b
+      range: 10.0.1.0/24
+    - az: c
+      range: 10.0.2.0/24
+  register: subnets
+- debug: var=subnets
+- ec2_vpc_igw:
+    vpc_id: "{{ vpc_result.vpc.id }}"
+    <<: *aws_connection_info
+    state: present
+  register: igw
+
+- ec2_vpc_route_table:
+    vpc_id: "{{ vpc_result.vpc.id }}"
+    <<: *aws_connection_info
+    tags:
+      Name: igw-route
+      Created: new_vpc
+    subnets: "{{ subnets.results | map(attribute='subnet') | map(attribute='id') | list}}"
+    routes:
+      - dest: 0.0.0.0/0
+        gateway_id: "{{ igw.gateway_id }}"
+
+- ec2_group:
+    name: '{{ demo_prefix }}-tower'
+    vpc_id: "{{ vpc_result.vpc.id }}"
+    <<: *aws_connection_info
+    description: Ansible tower web and incoming SSH
+    rules:
+    - cidr_ip: 0.0.0.0/0
+      proto: tcp
+      ports:
+      - 80
+      - 443
+      - 22
+- ec2_group:
+    name: '{{ demo_prefix }}-ssh'
+    vpc_id: "{{ vpc_result.vpc.id }}"
+    <<: *aws_connection_info
+    description: Global SSH for {{ demo_prefix }} servers
+    rules:
+    - cidr_ip: 0.0.0.0/0
+      proto: tcp
+      ports:
+      - 22
+    - proto: tcp
+      from_port: 0
+      to_port: 65535
+      group_name: '{{ demo_prefix }}-tower'
+- ec2_group:
+    name: '{{ demo_prefix }}-web'
+    vpc_id: "{{ vpc_result.vpc.id }}"
+    <<: *aws_connection_info
+    description: Web server rules for {{ demo_prefix }} servers
+    rules:
+    - cidr_ip: 0.0.0.0/0
+      proto: tcp
+      ports:
+      - 80
+      - 443
+    - proto: tcp
+      from_port: 0
+      to_port: 65535
+      group_name: '{{ demo_prefix }}-tower'

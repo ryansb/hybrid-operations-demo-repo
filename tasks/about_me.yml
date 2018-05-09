@@ -1,0 +1,19 @@
+---
+- name: Set up aws connection info
+  set_fact:
+    aws_connection_info: &aws_connection_info
+      profile: summit-18
+      region: "{{ aws_region }}"
+  no_log: yes
+- name: Who am I?
+  aws_caller_facts:
+    <<: *aws_connection_info
+  register: i_am
+
+- debug: var=i_am
+
+- name: Upload my favorite SSH key to make sure I can access hosts
+  ec2_key:
+    name: "{{ demo_prefix }}-ssh-key"
+    <<: *aws_connection_info
+    key_material: "{{ lookup('file', '~/.ssh/id_aws_slscode_2018.pem.pub') }}"

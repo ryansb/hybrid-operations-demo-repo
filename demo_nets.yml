@@ -1,0 +1,12 @@
+---
+- hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    aws_region: 'us-east-2'
+    demo_prefix: 'summit-18'
+  tasks:
+    - include: ./tasks/about_me.yml aws_region=us-east-2
+    - include: ./tasks/about_me.yml aws_region=us-west-2
+    - include: ./tasks/new_vpc.yml
+    - include: ./tasks/destroy.yml

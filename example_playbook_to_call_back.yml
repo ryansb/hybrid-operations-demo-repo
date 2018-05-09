@@ -1,0 +1,15 @@
+- gather_facts: false
+  tasks:
+  - yum:
+      name: "{{ item }}"
+      state: latest
+    with_items:
+      - nginx
+      - vim
+      - git
+      - epel-release
+    become: yes
+  - service:
+      name: nginx
+      state: running
+    become: yes

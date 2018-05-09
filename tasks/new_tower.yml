@@ -1,0 +1,90 @@
+---
+- name: Set up aws connection info
+  set_fact:
+    aws_connection_info: &aws_connection_info
+      profile: "summit-18"
+      region: "{{ aws_region }}"
+  no_log: yes
+- ec2_ami_facts:
+    # https://wiki.centos.org/Cloud/AWS collected 2018-01-10
+    <<: *aws_connection_info
+    owners: 900854079004
+    filters:
+      architecture: x86_64
+      virtualization-type: hvm
+      name: 'ansible-tower-*'
+  register: amis
+- set_fact:
+    latest_image: >
+      {{ amis.images | sort(attribute='creation_date') | last }}
+- debug: var=latest_image
+
+- name: create read-only instance role for Tower to do inventory
+  iam_role:
+    <<: *aws_connection_info
+    name: TowerReadAnything
+    path: /summitdemo/
+    state: present
+    create_instance_profile: yes
+    assume_role_policy_document:
+      Version: '2012-10-17'
+      Statement:
+        Effect: Allow
+        Principal:
+          Service: ec2.amazonaws.com
+        Action:
+          - sts:AssumeRole
+    managed_policy:
+      - ReadOnlyAccess
+
+- name: Get VPC ID
+  ec2_vpc_net_facts:
+    filters:
+      cidr: 10.0.0.0/20
+    <<: *aws_connection_info
+  register: networks
+- debug: var=networks
+- ec2_vpc_subnet_facts:
+    <<: *aws_connection_info
+    filters:
+      vpc-id: '{{ networks.vpcs[0].id }}'
+      availability-zone: '{{ aws_region }}a'
+  register: nets
+- debug: var=nets
+
+- ec2_instance:
+    state: running
+    image:
+      id: "{{ latest_image.image_id }}"
+    <<: *aws_connection_info
+    key_name: "{{ demo_prefix }}-ssh-key"
+    instance_role: TowerReadAnything
+    instance_type: t2.large
+    name: summit-tower-instance
+    security_groups:
+      - '{{ demo_prefix }}-tower'
+    network:
+      assign_public_ip: true
+    tags:
+      DNS: tower.glad.news
+    vpc_subnet_id: '{{ nets.subnets[0].id }}'
+  register: ec2
+- set_fact:
+    tower: "{{ ec2.instances | last }}"
+- debug: var=tower
+- route53:
+    profile: "summit-18"
+    zone: glad.news
+    record: tower.glad.news
+    state: present
+    overwrite: true
+    ttl: 300
+    type: A
+    value: "{{ tower.public_ip_address }}"
+- meta: refresh_inventory
+- delegate_to: tower.glad.news
+  wait_for_connection:
+- delegate_to: tower.glad.news
+  ec2_metadata_facts:
+  retries: 15
+  delay: 10
