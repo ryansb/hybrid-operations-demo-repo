@@ -6,12 +6,12 @@
       name: "{{ item }}"
       state: latest
     with_items:
-      - nginx
+      - epel-release
       - vim
       - git
-      - epel-release
+      - httpd
     become: yes
   - service:
-      name: nginx
+      name: httpd
       state: running
     become: yes
