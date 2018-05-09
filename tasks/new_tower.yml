@@ -85,6 +85,14 @@
 - delegate_to: tower.glad.news
   wait_for_connection:
 - delegate_to: tower.glad.news
+  copy:
+    src: files/tower_license.json
+    dest: /etc/tower/license
+    backup: yes
+  become: yes
+  retries: 15
+  delay: 10
+- delegate_to: tower.glad.news
   ec2_metadata_facts:
   retries: 15
   delay: 10
