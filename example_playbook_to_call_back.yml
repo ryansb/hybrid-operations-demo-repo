@@ -1,4 +1,6 @@
+---
 - gather_facts: false
+  hosts: all
   tasks:
   - yum:
       name: "{{ item }}"

@@ -9,4 +9,4 @@
     - include: ./tasks/about_me.yml aws_region=us-east-2
     - include: ./tasks/about_me.yml aws_region=us-west-2
     - include: ./tasks/new_vpc.yml
-    - include: ./tasks/destroy.yml
+    #- include: ./tasks/destroy.yml
